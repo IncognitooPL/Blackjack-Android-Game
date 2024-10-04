@@ -1,5 +1,5 @@
-package com.example.blackjack
 
+package com.example.blackjack
 import android.annotation.SuppressLint
 import android.os.Bundle
 import android.util.Log
@@ -9,6 +9,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.example.blackjack.databinding.ActivityMainBinding
+import kotlinx.coroutines.*
 
 //////////////////////////////////////////
 //           CARD DECK CLASS            //
@@ -53,43 +54,62 @@ class Table(
     private val player: Site,
     private val dealer: Site
 ) {
+    private fun calculateLayoutParams(
+        scale: Float, isDealer: Boolean, numberOfCards: Int
+    ): LinearLayout.LayoutParams {
+        val margin30dp = (30 * scale + 0.5f).toInt()
+        val margin20dp = (20 * scale + 0.5f).toInt()
+        val height70dp = (70 * scale + 0.5f).toInt()
 
-    private fun addCardToLayout(card: Card, layout: LinearLayout, numberOfCards: Int, isDealer: Boolean) {
-        val scale = binding.root.context.resources.displayMetrics.density
-        val imageView = ImageView(binding.root.context).apply {
-            setImageResource(card.drawable)
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                val margin30dp = (30 * scale + 0.5f).toInt()
-                if (numberOfCards > 1) {
-                    setMargins(
-                        if (isDealer) -margin30dp else 0,
-                        if (isDealer) -margin30dp else 0,
-                        if (!isDealer) -margin30dp else 0,
-                        if (!isDealer) -margin30dp else 0
-                    )
-                }
-                height = (70 * scale + 0.5f).toInt()
+        return LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            height70dp
+        ).apply {
+            if (isDealer) {
+                setMargins(
+                    if (numberOfCards % 2 == 0) -margin20dp else 0,
+                    if (numberOfCards > 1) -margin30dp else 0,
+                    0,
+                    0
+                )
+            } else {
+                setMargins(
+                    0,
+                    0,
+                    if (numberOfCards % 2 == 0) -margin20dp else 0,
+                    if (numberOfCards > 1) -margin30dp else 0
+                )
             }
         }
+    }
+
+    private fun addCardToLayout(
+        card: Card?, layout: LinearLayout, numberOfCards: Int, isDealer: Boolean, isBackCard: Boolean = false
+    ) {
+        val scale = binding.root.context.resources.displayMetrics.density
+        val layoutParams = calculateLayoutParams(scale, isDealer, numberOfCards)
+
+        val imageView = ImageView(binding.root.context).apply {
+            setImageResource(if (isBackCard) R.drawable.back_light else card?.drawable ?: 0)
+            this.layoutParams = layoutParams
+        }
+
         layout.addView(imageView, if (isDealer) -1 else 0)
+    }
+
+    fun addCardToTable(card: Card?, table: String, numberOfCards: Int, isBackCard: Boolean = false) {
+        val layout = when (table) {
+            "player" -> binding.playerCardsLayout
+            "dealer" -> binding.dealerCardsLayout
+            else -> throw IllegalArgumentException("Unknown table type: $table")
+        }
+        addCardToLayout(card, layout, numberOfCards, table == "dealer", isBackCard)
     }
 
     @SuppressLint("SetTextI18n")
     fun updateScores() {
         binding.playerPoints.text = "POINTS: ${player.getHandValue()}"
         binding.dealerPoints.text = "POINTS: ${dealer.getHandValue()}"
-    }
-
-    fun addCardToTable(card: Card, table: String, numberOfCards: Int) {
-        val layout = when (table) {
-            "player" -> binding.playerCardsLayout
-            "dealer" -> binding.dealerCardsLayout
-            else -> throw IllegalArgumentException("Unknown table type: $table")
-        }
-        addCardToLayout(card, layout, numberOfCards, table == "dealer")
     }
 }
 
@@ -99,13 +119,28 @@ class Table(
 
 class Site(private val site: String) {
     private val hand = mutableListOf<Card>()
+    private var hiddenCard: Card? = null
 
     fun addCard(card: Card) {
         hand.add(card)
     }
 
+    fun addHiddenCard(card: Card) {
+        hiddenCard = card
+    }
+
+    fun revealHiddenCard(table: Table) {
+        hiddenCard?.let {
+            addCard(it)
+            table.addCardToTable(it, site, hand.size)
+            table.updateScores()
+            hiddenCard = null
+        }
+    }
+
     fun resetHand() {
         hand.clear()
+        hiddenCard = null
     }
 
     fun getHandValue(): Int {
@@ -121,8 +156,6 @@ class Site(private val site: String) {
 
     fun isBusted(): Boolean = getHandValue() > 21
     fun hasBlackjack(): Boolean = getHandValue() == 21
-    fun showHand(): String = hand.joinToString { it.name }
-
     fun hit(card: Card, table: Table) {
         addCard(card)
         table.addCardToTable(card, site, hand.size)
@@ -141,12 +174,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var player: Site
     private lateinit var dealer: Site
 
-    @SuppressLint("MissingInflatedId")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
-
         setupEdgeToEdgeDisplay()
 
         binding.startButton.setOnClickListener {
@@ -174,16 +205,25 @@ class MainActivity : AppCompatActivity() {
         dealer = Site("dealer")
         table = Table(binding, player, dealer)
 
-        dealer.hit(cardDeck.drawCard(), table)
-        dealer.hit(cardDeck.drawCard(), table)
+        CoroutineScope(Dispatchers.Main).launch {
+            dealer.hit(cardDeck.drawCard(), table)
+            delay(2000)
 
-        player.hit(cardDeck.drawCard(), table)
-        player.hit(cardDeck.drawCard(), table)
+            dealer.addHiddenCard(cardDeck.drawCard())
+            table.addCardToTable(null, "dealer", 2, isBackCard = true)
+            delay(2000)
 
-        binding.decisionLayout.visibility = LinearLayout.VISIBLE
+            player.hit(cardDeck.drawCard(), table)
+            delay(2000)
+            player.hit(cardDeck.drawCard(), table)
+
+            delay(2000)
+            binding.decisionLayout.visibility = LinearLayout.VISIBLE
+        }
     }
 
     private fun dealerTurn() {
+        dealer.revealHiddenCard(table)
         while (dealer.getHandValue() < 17) {
             dealer.hit(cardDeck.drawCard(), table)
         }
