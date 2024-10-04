@@ -2,6 +2,7 @@ package com.example.blackjack
 
 import android.annotation.SuppressLint
 import android.os.Bundle
+import android.os.Handler
 import android.util.Log
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -57,8 +58,8 @@ class CardDeck {
 
 class Table(
     private val binding: ActivityMainBinding,
-    private val player: Player,
-    private val dealer: Dealer
+    private val player: Site,
+    private val dealer: Site
 ) {
 
     private fun addCardToLayout(
@@ -110,8 +111,8 @@ class Table(
 
     @SuppressLint("SetTextI18n")
     fun updateScores() {
-        binding.playerPoints.text = "POINTS: ${player.getHandValue().toString()}"
-        binding.dealerPoints.text = "POINTS: ${dealer.getHandValue().toString()}"
+        binding.playerPoints.text = "POINTS: ${player.getHandValue()}"
+        binding.dealerPoints.text = "POINTS: ${dealer.getHandValue()}"
     }
 
     fun addCardToTable(card: Card, table: String, numberOfCards: Int) {
@@ -125,17 +126,17 @@ class Table(
 }
 
 //////////////////////////////////////////
-//             PLAYER CLASS             //
+//              SITE CLASS              //
 //////////////////////////////////////////
 
-class Player() {
+class Site(private val site: String) {
     private val hand = mutableListOf<Card>()
 
     private fun addCard(card: Card) {
         hand.add(card)
     }
 
-    fun resetHand() {
+    fun resetHand(hand: MutableList<Card>) {
         hand.clear()
     }
 
@@ -168,61 +169,11 @@ class Player() {
         return hand.joinToString { it.name }
     }
 
-    fun hit(card: Card) {
+    fun hit(card: Card, table: Table) {
+        Thread.sleep(5000)
         addCard(card)
-    }
-
-    fun stand() {
-
-    }
-}
-
-//////////////////////////////////////////
-//             DEALER CLASS             //
-//////////////////////////////////////////
-
-class Dealer() {
-    private val hand = mutableListOf<Card>()
-
-    fun addCard(card: Card) {
-        hand.add(card)
-    }
-
-    fun resetHand() {
-        hand.clear()
-    }
-
-    fun getHandValue(): Int {
-        var total = 0
-        var aces = 0
-
-        for (card in hand) {
-            total += card.value
-            if (card.name.startsWith("A")) aces++
-        }
-
-        while (total > 21 && aces > 0) {
-            total -= 10
-            aces--
-        }
-
-        return total
-    }
-
-    fun isBusted(): Boolean {
-        return getHandValue() > 21
-    }
-
-    fun hasBlackjack(): Boolean {
-        return getHandValue() == 21
-    }
-
-    fun showHand(): String {
-        return hand.joinToString { it.name }
-    }
-
-    fun hit(card: Card) {
-        addCard(card)
+        table.addCardToTable(card, site, hand.count())
+        table.updateScores()
     }
 
     fun stand() {
@@ -240,11 +191,8 @@ class MainActivity : AppCompatActivity() {
     private  lateinit var binding: ActivityMainBinding              // View binding
     private lateinit var cardDeck: CardDeck                         // Card deck object
     private lateinit var table: Table                               // Table object
-    private lateinit var player: Player                             // Player object
-    private lateinit var dealer: Dealer                             // Dealer object
-
-    private var playerCardCount = 0                                 // Player card count
-    private var dealerCardCount = 0                                 // Dealer card count
+    private lateinit var player: Site                               // Player object
+    private lateinit var dealer: Site                               // Dealer object
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)                          // Call the superclass onCreate
@@ -261,66 +209,46 @@ class MainActivity : AppCompatActivity() {
             insets
         }
 
-        cardDeck = CardDeck()
-        player = Player()
-        dealer = Dealer()
+        fun StartGame() {
+            cardDeck = CardDeck()
+            player = Site("player")
+            dealer = Site("dealer")
+            table = Table(binding, player, dealer)
 
-        table = Table(binding, player, dealer)
+            dealer.hit(cardDeck.drawCard(), table)                        // Dealer draws a card
+            dealer.hit(cardDeck.drawCard(), table)                        // Dealer draws a card
 
+            player.hit(cardDeck.drawCard(), table)                        // Player draws a card
+            player.hit(cardDeck.drawCard(), table)                        // Player draws a card
 
-        val playerCard1 : Card = cardDeck.drawCard()                            // Draw a card for the player
-        val dealerCard1 : Card = cardDeck.drawCard()                            // Draw a card for the dealer
+            binding.decisionLayout.visibility = LinearLayout.VISIBLE
+        }
 
-        player.hit(playerCard1)                                                 // Player hits
-        playerCardCount++                                                       // Increment player card count
-        table.addCardToTable(playerCard1, "player", playerCardCount)        // Add the card to the table
+        binding.startButton.setOnClickListener {
+            binding.startLayout.visibility = LinearLayout.GONE
+            StartGame()
+        }
 
-        dealer.hit(dealerCard1)                                                 // Dealer hits
-        dealerCardCount++                                                       // Increment dealer card count
-        table.addCardToTable(dealerCard1, "dealer", dealerCardCount)        // Add the card to the table
+        binding.hitButton.setOnClickListener {
+            player.hit(cardDeck.drawCard(), table)
+            if (player.isBusted()) {
+                binding.decisionLayout.visibility = LinearLayout.GONE
+                Log.d("Blackjack", "Player busted")
+            }
+        }
 
-        table.updateScores()                                                    // Update the scores
-
-
-
-        val playerCard2 : Card = cardDeck.drawCard()
-        val dealerCard2 : Card = cardDeck.drawCard()
-
-        player.hit(playerCard2)
-        playerCardCount++
-        table.addCardToTable(playerCard2, "player", playerCardCount)
-
-        dealer.hit(dealerCard2)
-        dealerCardCount++
-        table.addCardToTable(dealerCard2, "dealer", dealerCardCount)
-
-        table.updateScores()
-
-        val playerCard3 : Card = cardDeck.drawCard()
-        val dealerCard3 : Card = cardDeck.drawCard()
-
-        player.hit(playerCard3)
-        playerCardCount++
-        table.addCardToTable(playerCard3, "player", playerCardCount)
-
-        dealer.hit(dealerCard3)
-        dealerCardCount++
-        table.addCardToTable(dealerCard3, "dealer", dealerCardCount)
-
-        table.updateScores()
-
-        val playerCard4 : Card = cardDeck.drawCard()
-        val dealerCard4 : Card = cardDeck.drawCard()
-
-        player.hit(playerCard4)
-        playerCardCount++
-        table.addCardToTable(playerCard4, "player", playerCardCount)
-
-        dealer.hit(dealerCard4)
-        dealerCardCount++
-        table.addCardToTable(dealerCard4, "dealer", dealerCardCount)
-
-
-        table.updateScores()
+        binding.stayButton.setOnClickListener {
+            binding.decisionLayout.visibility = LinearLayout.GONE
+            while (dealer.getHandValue() < 17) {
+                dealer.hit(cardDeck.drawCard(), table)
+            }
+            if (dealer.isBusted() || player.getHandValue() > dealer.getHandValue()) {
+                Log.d("Blackjack", "Player wins")
+            } else if (player.getHandValue() < dealer.getHandValue()) {
+                Log.d("Blackjack", "Dealer wins")
+            } else {
+                Log.d("Blackjack", "It's a tie")
+            }
+        }
     }
 }
