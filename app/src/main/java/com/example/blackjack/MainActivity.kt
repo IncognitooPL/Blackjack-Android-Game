@@ -114,7 +114,7 @@ class Table(
 }
 
 //////////////////////////////////////////
-//              SITE CLASS              //
+//             SITE CLASS              //
 //////////////////////////////////////////
 
 class Site(private val site: String) {
