@@ -69,7 +69,7 @@ class Cards(){
     }
     inner class ClubA() : Card{
         override val name = "Ace of Clubs"
-        override val value = 11
+        override val value = 10
         override val drawable = R.drawable.clubsa
     }
     inner class Diamond2() : Card{
@@ -134,7 +134,7 @@ class Cards(){
     }
     inner class DiamondA() : Card{
         override val name = "Ace of Diamonds"
-        override val value = 11
+        override val value = 10
         override val drawable = R.drawable.diamondsa
     }
     inner class Heart2() : Card{
@@ -199,7 +199,7 @@ class Cards(){
     }
     inner class HeartA() : Card{
         override val name = "Ace of Hearts"
-        override val value = 11
+        override val value = 10
         override val drawable = R.drawable.heartsa
     }
     inner class Spade2() : Card{
@@ -264,7 +264,7 @@ class Cards(){
     }
     inner class SpadeA() : Card{
         override val name = "Ace of Spades"
-        override val value = 11
+        override val value = 10
         override val drawable = R.drawable.spadesa
     }
 }

@@ -1,11 +1,12 @@
-
 package com.example.blackjack
+
 import android.annotation.SuppressLint
 import android.os.Bundle
 import android.util.Log
 import android.widget.ImageView
 import android.widget.LinearLayout
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.example.blackjack.databinding.ActivityMainBinding
@@ -54,46 +55,37 @@ class Table(
     private val player: Site,
     private val dealer: Site
 ) {
-    private fun calculateLayoutParams(
-        scale: Float, isDealer: Boolean, numberOfCards: Int
-    ): LinearLayout.LayoutParams {
-        val margin30dp = (30 * scale + 0.5f).toInt()
-        val margin20dp = (20 * scale + 0.5f).toInt()
-        val height70dp = (70 * scale + 0.5f).toInt()
+    private val scale by lazy { binding.root.context.resources.displayMetrics.density }
+    private val cardHeight = (70 * scale + 0.5f).toInt()
+    private val margin30dp = (30 * scale + 0.5f).toInt()
+    private val margin20dp = (20 * scale + 0.5f).toInt()
 
+    private fun calculateLayoutParams(isDealer: Boolean, numberOfCards: Int): LinearLayout.LayoutParams {
         return LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT,
-            height70dp
+            cardHeight
         ).apply {
-            if (isDealer) {
-                setMargins(
-                    if (numberOfCards % 2 == 0) -margin20dp else 0,
-                    if (numberOfCards > 1) -margin30dp else 0,
-                    0,
-                    0
-                )
-            } else {
-                setMargins(
-                    0,
-                    0,
-                    if (numberOfCards % 2 == 0) -margin20dp else 0,
-                    if (numberOfCards > 1) -margin30dp else 0
-                )
-            }
+            val horizontalMargin = if (numberOfCards % 2 == 0) -margin20dp else 0
+            val verticalMargin = if (numberOfCards > 1) -margin30dp else 0
+
+            if (isDealer) setMargins(horizontalMargin, verticalMargin, 0, 0)
+            else setMargins(0, 0, horizontalMargin, verticalMargin)
+        }
+    }
+
+    private fun createCardImageView(card: Card?, isBackCard: Boolean): ImageView {
+        return ImageView(binding.root.context).apply {
+            setImageResource(if (isBackCard) R.drawable.back_light else card?.drawable ?: 0)
         }
     }
 
     private fun addCardToLayout(
         card: Card?, layout: LinearLayout, numberOfCards: Int, isDealer: Boolean, isBackCard: Boolean = false
     ) {
-        val scale = binding.root.context.resources.displayMetrics.density
-        val layoutParams = calculateLayoutParams(scale, isDealer, numberOfCards)
-
-        val imageView = ImageView(binding.root.context).apply {
-            setImageResource(if (isBackCard) R.drawable.back_light else card?.drawable ?: 0)
+        val layoutParams = calculateLayoutParams(isDealer, numberOfCards)
+        val imageView = createCardImageView(card, isBackCard).apply {
             this.layoutParams = layoutParams
         }
-
         layout.addView(imageView, if (isDealer) -1 else 0)
     }
 
@@ -114,14 +106,14 @@ class Table(
 }
 
 //////////////////////////////////////////
-//             SITE CLASS              //
+//             SITE CLASS               //
 //////////////////////////////////////////
 
-class Site(private val site: String) {
+class Site(private val site: String, private val binding: ActivityMainBinding) {
     private val hand = mutableListOf<Card>()
     private var hiddenCard: Card? = null
 
-    fun addCard(card: Card) {
+    private fun addCard(card: Card) {
         hand.add(card)
     }
 
@@ -131,9 +123,13 @@ class Site(private val site: String) {
 
     fun revealHiddenCard(table: Table) {
         hiddenCard?.let {
+            binding.dealerCardsLayout.removeViewAt(1)
+
             addCard(it)
             table.addCardToTable(it, site, hand.size)
+
             table.updateScores()
+
             hiddenCard = null
         }
     }
@@ -154,8 +150,8 @@ class Site(private val site: String) {
         return total
     }
 
-    fun isBusted(): Boolean = getHandValue() > 21
-    fun hasBlackjack(): Boolean = getHandValue() == 21
+    fun isBusted() = getHandValue() > 21
+
     fun hit(card: Card, table: Table) {
         addCard(card)
         table.addCardToTable(card, site, hand.size)
@@ -185,28 +181,26 @@ class MainActivity : AppCompatActivity() {
             startGame()
         }
 
-        binding.hitButton.setOnClickListener {
-            player.hit(cardDeck.drawCard(), table)
-            if (player.isBusted()) {
-                binding.decisionLayout.visibility = LinearLayout.GONE
-                Log.d("Blackjack", "Player busted")
-            }
-        }
-
-        binding.stayButton.setOnClickListener {
-            binding.decisionLayout.visibility = LinearLayout.GONE
-            dealerTurn()
-        }
+        binding.hitButton.setOnClickListener { handlePlayerHit() }
+        binding.stayButton.setOnClickListener { handleDealerTurn() }
+        binding.resetButton.setOnClickListener { resetGame() }
     }
 
     private fun startGame() {
         cardDeck = CardDeck()
-        player = Site("player")
-        dealer = Site("dealer")
+        player = Site("player", binding)
+        dealer = Site("dealer", binding)
         table = Table(binding, player, dealer)
+
+        binding.endLayout.visibility = LinearLayout.GONE
+        binding.dealerCardsLayout.removeAllViews()
+        binding.playerCardsLayout.removeAllViews()
 
         CoroutineScope(Dispatchers.Main).launch {
             dealer.hit(cardDeck.drawCard(), table)
+            delay(2000)
+
+            player.hit(cardDeck.drawCard(), table)
             delay(2000)
 
             dealer.addHiddenCard(cardDeck.drawCard())
@@ -215,24 +209,75 @@ class MainActivity : AppCompatActivity() {
 
             player.hit(cardDeck.drawCard(), table)
             delay(2000)
-            player.hit(cardDeck.drawCard(), table)
 
-            delay(2000)
             binding.decisionLayout.visibility = LinearLayout.VISIBLE
         }
     }
 
+    private fun handlePlayerHit() {
+        CoroutineScope(Dispatchers.Main).launch {
+            binding.decisionLayout.visibility = LinearLayout.GONE
+            delay(2000)
+            player.hit(cardDeck.drawCard(), table)
+            if (player.isBusted()) {
+                delay(2000)
+                endGame("Player busted! Dealer wins!")
+            } else {
+                delay(2000)
+                binding.decisionLayout.visibility = LinearLayout.VISIBLE
+            }
+        }
+    }
+
+    private fun handleDealerTurn() {
+        binding.decisionLayout.visibility = LinearLayout.GONE
+        dealerTurn()
+    }
+
     private fun dealerTurn() {
-        dealer.revealHiddenCard(table)
-        while (dealer.getHandValue() < 17) {
-            dealer.hit(cardDeck.drawCard(), table)
+        CoroutineScope(Dispatchers.Main).launch {
+            dealer.revealHiddenCard(table)
+            delay(2000)
+            while (dealer.getHandValue() < 17) {
+                dealer.hit(cardDeck.drawCard(), table)
+                delay(2000)
+            }
+            val result = when {
+                dealer.isBusted() -> "Dealer busted! Player wins!"
+                player.getHandValue() > dealer.getHandValue() -> "Player wins!"
+                player.getHandValue() < dealer.getHandValue() -> "Dealer wins!"
+                else -> "It's a tie!"
+            }
+            delay(2000)
+            endGame(result)
         }
-        val result = when {
-            dealer.isBusted() || player.getHandValue() > dealer.getHandValue() -> "Player wins"
-            player.getHandValue() < dealer.getHandValue() -> "Dealer wins"
-            else -> "It's a tie"
+    }
+
+    private fun endGame(result: String) {
+        binding.endText.text = result
+
+        val color = when (result) {
+            "Player wins!" -> ContextCompat.getColor(this, R.color.gold)
+            "Dealer wins!" -> ContextCompat.getColor(this, R.color.red)
+            "It's a tie!" -> ContextCompat.getColor(this, R.color.white)
+            "Player busted! Dealer wins!" -> ContextCompat.getColor(this, R.color.red)
+            "Dealer busted! Player wins!" -> ContextCompat.getColor(this, R.color.gold)
+            else -> ContextCompat.getColor(this, R.color.white)
         }
+
+        binding.endText.setTextColor(color)
+        binding.endLayout.visibility = LinearLayout.VISIBLE
         Log.d("Blackjack", result)
+    }
+
+
+
+
+    private fun resetGame() {
+        player.resetHand()
+        dealer.resetHand()
+        binding.startLayout.visibility = LinearLayout.VISIBLE
+        binding.endLayout.visibility = LinearLayout.GONE
     }
 
     private fun setupEdgeToEdgeDisplay() {
@@ -243,3 +288,4 @@ class MainActivity : AppCompatActivity() {
         }
     }
 }
+
